@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>إدارة قاطع جنوب الرصافة - نظام المساهمات</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="./lib/app-style.css" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Noto+Sans+Arabic:wght@400;700;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+</head>
+<body class="bg-[#001e40] min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+    
+    <!-- Background Decoration -->
+    <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div class="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-blue-500/20 rounded-full blur-[120px]"></div>
+        <div class="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-amber-500/10 rounded-full blur-[120px]"></div>
+    </div>
+
+    <main class="w-full max-w-md animate-fade-in z-10">
+        <div class="glass-card p-8 md:p-10 text-center">
+            <div class="w-24 h-24 bg-white rounded-3xl shadow-2xl mx-auto mb-8 flex items-center justify-center relative group">
+                <span class="material-symbols-outlined text-5xl text-[#002d5a] group-hover:scale-110 transition-transform">admin_panel_settings</span>
+                <div class="absolute -bottom-2 -right-2 w-8 h-8 bg-amber-500 rounded-full border-4 border-white flex items-center justify-center">
+                    <span class="material-symbols-outlined text-white text-xs">verified</span>
+                </div>
+            </div>
+
+            <h1 class="text-2xl font-black text-[#002d5a] mb-2">إدارة قاطع جنوب الرصافة</h1>
+            <p class="text-slate-500 text-sm font-bold mb-8">نظام المراقبة والإحصاء المركزي للدوائر</p>
+
+            <form id="loginForm" class="space-y-6">
+                <div class="text-right">
+                    <label class="block text-xs font-black text-slate-400 uppercase mb-2 mr-2">رمز الدخول الأمني</label>
+                    <div class="relative">
+                        <input type="password" id="accessCode" required
+                            class="w-full bg-slate-100 border-none rounded-2xl px-6 py-4 text-center text-xl font-black tracking-widest focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300"
+                            placeholder="••••••">
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full btn-primary py-5 text-lg shadow-blue-900/40">
+                    <span>دخول للنظام المركزي</span>
+                    <span class="material-symbols-outlined">analytics</span>
+                </button>
+            </form>
+
+            <div class="mt-8 pt-8 border-t border-slate-200/50 flex justify-center gap-6 opacity-60">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-blue-600"></div>
+                    <span class="text-[10px] font-black uppercase tracking-wider">الدائرة 18</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+                    <span class="text-[10px] font-black uppercase tracking-wider">الدائرة 19</span>
+                </div>
+            </div>
+        </div>
+
+        <p class="mt-8 text-center text-white/40 text-[10px] font-bold uppercase tracking-widest">
+            Al-Bunyan System &copy; 2026 - Central Sector Management
+        </p>
+    </main>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const code = document.getElementById('accessCode').value;
+            
+            // For now, a simple check. In a real app, this would be more secure.
+            if (code === '123456' || code === 'sector2026') {
+                localStorage.setItem('sectorSession', 'active');
+                window.location.href = 'dashboard.html';
+            } else {
+                alert('رمز الدخول غير صحيح، يرجى التأكد والمحاولة مرة أخرى.');
+            }
+        });
+
+        // Check session
+        if (localStorage.getItem('sectorSession') === 'active') {
+            window.location.href = 'dashboard.html';
+        }
+    </script>
+</body>
+</html>
