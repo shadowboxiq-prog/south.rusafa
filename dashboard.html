@@ -257,6 +257,50 @@
             </div>
         </section>
 
+        <!-- Books Management Section -->
+        <section class="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-100">
+            <div class="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
+                <h3 class="text-xl font-black text-[#002d5a] flex items-center gap-3">
+                    <span class="w-2 h-8 bg-emerald-500 rounded-full"></span>
+                    إدارة الدفاتر والعهد (النشطة)
+                </h3>
+                <div class="flex gap-2">
+                    <button onclick="exportAllBooksInDistrict(18)" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20">
+                        <span class="material-symbols-outlined text-sm">download_for_offline</span>
+                        تصدير دفاتر د18
+                    </button>
+                    <button onclick="exportAllBooksInDistrict(19)" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20">
+                        <span class="material-symbols-outlined text-sm">download_for_offline</span>
+                        تصدير دفاتر د19
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- District 18 Books -->
+                <div class="space-y-4">
+                    <h4 class="text-xs font-black text-blue-600 uppercase flex items-center gap-2 mb-4">
+                        <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                        دفاتر الدائرة 18
+                    </h4>
+                    <div id="booksList18" class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                        <!-- Dynamic -->
+                    </div>
+                </div>
+
+                <!-- District 19 Books -->
+                <div class="space-y-4">
+                    <h4 class="text-xs font-black text-indigo-600 uppercase flex items-center gap-2 mb-4">
+                        <span class="w-2 h-2 rounded-full bg-indigo-600"></span>
+                        دفاتر الدائرة 19
+                    </h4>
+                    <div id="booksList19" class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                        <!-- Dynamic -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <script type="module">
@@ -327,7 +371,55 @@
             ]);
 
             processStats(data18 || [], data19 || []);
+            
+            // Also load books list
+            await loadBooks();
+
             loader.classList.add('hidden');
+        }
+
+        async function loadBooks() {
+            const monthFilter = currentMonth ? `&month_year=eq.${currentMonth}` : '';
+            // Fetch receipts join to get accurate count even if DB trigger is behind
+            const queryParams = `select=*,profiles(full_name),receipts(id)&order=created_at.desc${monthFilter}`;
+            
+            // Fetch Dist 18
+            const books18 = await fetchWithBypass(18, 'books', queryParams);
+
+            // Fetch Dist 19 with fallback
+            let books19 = await fetchWithBypass(19, 'books', queryParams);
+            if (books19 === null && currentMonth) {
+                // Try fallback to book_name column if month_year is missing
+                books19 = await fetchWithBypass(19, 'books', `select=*,profiles(full_name),receipts(id)&order=created_at.desc&book_name=eq.${currentMonth}`);
+            }
+
+            renderBooksList(18, books18 || []);
+            renderBooksList(19, books19 || []);
+        }
+
+        function renderBooksList(distId, books) {
+            const container = document.getElementById(`booksList${distId}`);
+            if (books.length === 0) {
+                container.innerHTML = '<p class="text-center py-4 opacity-50 text-xs">لا توجد دفاتر مسجلة</p>';
+                return;
+            }
+
+            container.innerHTML = books.map(b => `
+                <div class="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100 group hover:border-blue-200 transition-all">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg ${distId === 18 ? 'bg-blue-100 text-blue-600' : 'bg-indigo-100 text-indigo-600'} flex items-center justify-center font-black text-[10px]">
+                            #${b.serial_number}
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-black text-slate-700">${b.book_name}</p>
+                            <p class="text-[8px] font-bold text-slate-400">${b.profiles?.full_name || 'غير معروف'} • ${b.receipts?.length || 0} وصل</p>
+                        </div>
+                    </div>
+                    <button onclick="exportSingleBook(${distId}, '${b.id}', '${b.serial_number}')" class="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="تصدير محتويات الدفتر">
+                        <span class="material-symbols-outlined text-sm">download</span>
+                    </button>
+                </div>
+            `).join('');
         }
 
         function processStats(d18, d19) {
@@ -583,6 +675,197 @@
             } catch (err) {
                 console.error('Export error:', err);
                 alert('فشل تصدير بيانات الدائرة');
+            } finally {
+                loader.classList.add('hidden');
+            }
+        };
+
+        window.exportSingleBook = async (distId, bookId, serialNumber) => {
+            const loader = document.getElementById('globalLoader');
+            loader.classList.remove('hidden');
+            
+            try {
+                const queryParams = `select=amount,created_at,receipt_number,subscriber_name,receipt_date,profiles(full_name)&book_id=eq.${bookId}`;
+                const data = await fetchWithBypass(distId, 'receipts', queryParams);
+
+                if (!data || data.length === 0) {
+                    alert('لا توجد وصولات مسجلة في هذا الدفتر');
+                    return;
+                }
+
+                const workbook = new ExcelJS.Workbook();
+                const sheet = workbook.addWorksheet(`دفتر رقم ${serialNumber}`, { views: [{ rightToLeft: true }] });
+
+                // Header styling
+                const headerRow = sheet.addRow(['ت', 'اسم المساهم', 'المبلغ', 'التاريخ', 'رقم الوصل', 'المشرف الميداني']);
+                headerRow.height = 30;
+                headerRow.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+                headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+                headerRow.eachCell(cell => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } }; // Emerald
+                    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                });
+
+                sheet.columns = [
+                    { key: 'index', width: 5 },
+                    { key: 'name', width: 35 },
+                    { key: 'amount', width: 15 },
+                    { key: 'date', width: 15 },
+                    { key: 'num', width: 15 },
+                    { key: 'ally', width: 25 }
+                ];
+
+                let total = 0;
+                data.forEach((r, i) => {
+                    total += r.amount;
+                    const row = sheet.addRow({
+                        index: i + 1,
+                        name: r.subscriber_name || 'غير محدد',
+                        amount: r.amount,
+                        date: r.receipt_date || new Date(r.created_at).toLocaleDateString('ar-EG'),
+                        num: r.receipt_number || '-',
+                        ally: r.profiles?.full_name || '-'
+                    });
+                    row.alignment = { horizontal: 'center', vertical: 'middle' };
+                    row.eachCell(cell => {
+                        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                    });
+                });
+
+                const summaryRow = sheet.addRow([`إجمالي الدفتر: ${total.toLocaleString()} د.ع`, '', '', '', `رقم الدفتر: ${serialNumber}`, '']);
+                sheet.mergeCells(`A${summaryRow.number}:D${summaryRow.number}`);
+                sheet.mergeCells(`E${summaryRow.number}:F${summaryRow.number}`);
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `محتويات_دفتر_${serialNumber}_د${distId}.xlsx`;
+                a.click();
+            } catch (err) {
+                console.error(err);
+                alert('فشل تصدير محتويات الدفتر');
+            } finally {
+                loader.classList.add('hidden');
+            }
+        };
+
+        window.exportAllBooksInDistrict = async (distId) => {
+            const loader = document.getElementById('globalLoader');
+            loader.classList.remove('hidden');
+            
+            try {
+                // 1. Fetch all books with ally names (Filtered by month if selected)
+                const monthFilter = currentMonth ? `&month_year=eq.${currentMonth}` : '';
+                const query = `select=*,profiles(full_name)&order=created_at.desc${monthFilter}`;
+                let books = await fetchWithBypass(distId, 'books', query);
+                
+                // Fallback for Dist 19 if month_year column is missing
+                if (distId === 19 && books === null && currentMonth) {
+                    books = await fetchWithBypass(distId, 'books', `select=*,profiles(full_name)&order=created_at.desc&book_name=eq.${currentMonth}`);
+                }
+                
+                if (!books || books.length === 0) {
+                    alert('لا توجد دفاتر لتصديرها');
+                    return;
+                }
+
+                const workbook = new ExcelJS.Workbook();
+                const sheet = workbook.addWorksheet('تقرير الدفاتر', { views: [{ rightToLeft: true }] });
+
+                // Setup Columns
+                sheet.columns = [
+                    { key: 'index', width: 8 },
+                    { key: 'serial', width: 25 },
+                    { key: 'count', width: 25 },
+                    { key: 'amount', width: 25 },
+                    { key: 'ally', width: 40 }
+                ];
+
+                // Title Row
+                const now = new Date();
+                const [y, m] = currentMonth ? currentMonth.split('-') : [now.getFullYear(), now.getMonth() + 1];
+                const titleText = `قاعدة بيانات الدفاتر لشهر ( ${y}/${parseInt(m)} )`;
+                
+                const titleRow = sheet.addRow([titleText]);
+                sheet.mergeCells('A1:E1');
+                titleRow.height = 40;
+                titleRow.getCell(1).font = { bold: true, size: 16, family: 2 };
+                titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+                titleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+                titleRow.getCell(1).border = { 
+                    top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} 
+                };
+
+                // Header Row
+                const headerRow = sheet.addRow(['ت', 'رقم الدفتر', 'عدد الوصولات', 'المبلغ', 'اسم الحليف الذي بحوزته الدفتر']);
+                headerRow.height = 35;
+                headerRow.eachCell((cell) => {
+                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF001E40' } }; // Deep Blue
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                });
+
+                // Data Rows
+                books.forEach((b, i) => {
+                    const row = sheet.addRow([
+                        i + 1,
+                        `#${b.serial_number}`,
+                        b.receipt_count,
+                        b.total_amount,
+                        b.profiles?.full_name || 'غير معروف'
+                    ]);
+                    row.height = 30;
+                    row.eachCell((cell) => {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                        cell.font = { size: 11 };
+                        // Alternate row coloring
+                        if (i % 2 !== 0) {
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+                        }
+                    });
+                });
+
+                // Totals Row (Matching the new requested design)
+                const totalCount = books.reduce((sum, b) => sum + (b.receipt_count || 0), 0);
+                const totalAmount = books.reduce((sum, b) => sum + (b.total_amount || 0), 0);
+                const today = new Date().toLocaleDateString('ar-EG');
+                
+                const summaryRow = sheet.addRow([
+                    `المجموع الكلي\n${totalAmount.toLocaleString()}`,
+                    '',
+                    `عدد الوصولات : ${totalCount}`,
+                    '',
+                    `التاريخ : ${today}`
+                ]);
+                
+                summaryRow.height = 50; // Taller for multi-line
+                summaryRow.font = { bold: true, size: 12 };
+                summaryRow.eachCell((cell) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EDF2' } };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                });
+
+                sheet.mergeCells(`A${summaryRow.number}:B${summaryRow.number}`);
+                sheet.mergeCells(`C${summaryRow.number}:D${summaryRow.number}`);
+                // Column E remains for the date
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const distName = distId === 18 ? 'د18' : 'د19';
+                a.href = url;
+                a.download = `تقرير_دفاتر_${distName}_${y}_${m}.xlsx`;
+                a.click();
+
+            } catch (err) {
+                console.error(err);
+                alert('فشل تصدير مجموعة الدفاتر');
             } finally {
                 loader.classList.add('hidden');
             }
